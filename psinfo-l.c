@@ -34,21 +34,18 @@ typedef struct p_ {
 
 typedef struct t_p{
   int pid;
-  int pos;
-} t_params;
+} Tid;
 
 pthread_mutex_t mutex;
 sem_t empty;
 sem_t full;
-//sem_t mutex;
-pthread_mutex_t lock;
 
 proc_info* proc_buff;
 int n_procs;
 int next_in = 0;
 int next_out;
 
-void* put_info(void* _params);  // Productor
+void* put_info(void* _tid);  // Productor
 void* consume_info(void* nope); // Consumidor
 
 proc_info* load_info(int pid);
@@ -67,19 +64,12 @@ int main(int argc, char *argv[]){
   }
 
   /* mutex init*/
-  if (pthread_mutex_init(&lock, NULL) != 0)
-  {
-   printf("\n mutex init failed\n");
-   return 1;
-  }
-  /* mutex init*/
   if (pthread_mutex_init(&mutex, NULL) != 0)
   {
    printf("\n mutex init failed\n");
    return 1;
   }
 
- // sem_init(&mutex, 0, 1);
   sem_init(&empty, 0, n_procs);
   sem_init(&full, 0, 0);
 
@@ -91,18 +81,14 @@ int main(int argc, char *argv[]){
   proc_buff = malloc(sizeof(proc_info)*n_procs);
   assert(proc_buff!=NULL);
   
-  t_params* params = malloc(sizeof(t_params)*n_procs);
-  assert(params!=NULL);
-  
-  // = malloc(sizeof(t_params));
-  //assert(params!=NULL);
+  Tid* tid = malloc(sizeof(Tid)*n_procs);
+  assert(tid!=NULL);
+
   // Get information from status file
   for(i = 0; i < n_procs; i++){
     int pid = atoi(argv[i+1]);
-    //printf("%d\n", pid);
-    params[i].pid = pid;
-    params[i].pos = i;
-    pthread_create(&threads[i], NULL, &put_info, &params[i]);
+    tid[i].pid = pid;
+    pthread_create(&threads[i], NULL, &put_info, &tid[i]);
   }
   pthread_create(&print_tread, NULL, &consume_info, NULL);
 
@@ -111,16 +97,9 @@ int main(int argc, char *argv[]){
   }
   pthread_join(print_tread, NULL);
 
-  //print_info(&proc_buff[0]);
-  /*Machete debugger*/
-  //printf("pppp\n");
-  //exit(1);
-  
   // free heap memory
   free(proc_buff);
   /* mutex destroy*/
-  pthread_mutex_destroy(&lock);
-  //sem_destroy(&mutex);
   pthread_mutex_destroy(&mutex);
   sem_destroy(&empty);
   sem_destroy(&full);
@@ -128,50 +107,37 @@ int main(int argc, char *argv[]){
 }
 
 // Productor
-void* put_info(void* _params){
-  int pos;
+void* put_info(void* _tid){
   // Inicio región crítica
-  pthread_mutex_lock(&lock);
   sem_wait(&empty);
   pthread_mutex_lock(&mutex);
-  t_params* params = (t_params*) _params;
-  proc_info* myinfo = load_info(params->pid);
-  if(sem_getvalue(&full, &pos) != 0){
-    printf("\nCan't get value for full semaphore from producer\n");
-    exit(1);
-  }
+  Tid* tid = (Tid*) _tid;
+  proc_info* myinfo = load_info(tid->pid);
   proc_buff[next_in] = *myinfo; // Produce
   next_out = next_in;
   next_in++;
   free(myinfo);
   pthread_mutex_unlock(&mutex);
   sem_post(&full);
-  pthread_mutex_unlock(&lock);
   // Fin región crítica
   return NULL;
 }
 
 // Consumidor
 void* consume_info(void* nope){
-  int pos, i;
+  int i;
   for(i = 0; i < n_procs; i++){
     // Inicio región crítica
-    //pthread_mutex_lock(&lock);
     sem_wait(&full);
     pthread_mutex_lock(&mutex);
-    if(sem_getvalue(&full, &pos) != 0){
-      printf("\nCan't get value for full semaphore from consumer\n");
-      exit(1);
-    }
     
-    printf("\n\t******Debugg %d******\n", next_in);
+    // printf("\n\t******Debugg item: #%d******\n", next_out);
     
     print_info(&proc_buff[next_out]); //Consume
     next_in--;
     next_out--;
     pthread_mutex_unlock(&mutex);
     sem_post(&empty);
-    // pthread_mutex_unlock(&lock);
     // Fin región crítica
   }
   return NULL;
