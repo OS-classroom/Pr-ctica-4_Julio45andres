@@ -4,10 +4,13 @@
  *          
  *  This program prints some basic information for a given 
  *  list of processes.
- *  You can use this code as a basis for implementing parallelization 
- *  through the pthreads library. 
- *
- *   \author: Danny Munera - Sistemas Operativos UdeA
+ *  Código paralelizado con la librerias pthread y semaphore. 
+ *  La solución al problema de la región crítica es la del
+ *  bounded buffer, con un buffer de tamaño 3.
+ *  Perdone el spanglish :v
+ * 
+ *  \author: Danny Munera - Sistemas Operativos UdeA
+ *  \editor: Julián Muñoz - Ingenieria de sistemas UdeA
  */
 
 #include <stdio.h>
@@ -18,8 +21,11 @@
 #include <semaphore.h>
 
 #define MAX_BUFFER 100
+// Tamaño de buffer
+#define BUFFER_SIZE 3
 //#define DEBUG
 
+// Process info structure
 typedef struct p_ {
   int pid;
   char name[MAX_BUFFER];
@@ -32,23 +38,32 @@ typedef struct p_ {
   int nonvoluntary_ctxt_switches;
 } proc_info;
 
+// Thread id structure
 typedef struct t_p{
   int pid;
 } Tid;
 
+// For thread synchronization
 pthread_mutex_t mutex;
 sem_t empty;
 sem_t full;
 
+// Buffer variables
 proc_info* proc_buff;
 int n_procs;
 int next_in = 0;
 int next_out;
 
-void* put_info(void* _tid);  // Productor
-void* consume_info(void* nope); // Consumidor
+// Producer threads function
+void* put_info(void* _tid);
+// Consumer thread function
+void* consume_info(void* nope);
 
+/*  Loads data of process with process id pid
+ *  into a proc_info structure.
+ */
 proc_info* load_info(int pid);
+//  Prints info of pi proc_info structure into standard output.
 void print_info(proc_info* pi);
   
 int main(int argc, char *argv[]){
@@ -70,18 +85,27 @@ int main(int argc, char *argv[]){
    return 1;
   }
 
-  sem_init(&empty, 0, n_procs);
+  /* 
+   * Semaphore inicialization 
+   */
+  sem_init(&empty, 0, BUFFER_SIZE);
   sem_init(&full, 0, 0);
+  /* 
+   *  
+   */
 
+  /* 
+   * Thread configuratio 
+   */
   pthread_t* threads = malloc(sizeof(pthread_t)*n_procs);
-  pthread_t print_tread;
   assert(threads!=NULL);
+  pthread_t print_tread;
 
   /*Allocate memory for each process info*/
-  proc_buff = malloc(sizeof(proc_info)*n_procs);
+  proc_buff = malloc(sizeof(proc_info)*BUFFER_SIZE);
   assert(proc_buff!=NULL);
   
-  Tid* tid = malloc(sizeof(Tid)*n_procs);
+  Tid* tid = malloc(sizeof(Tid));
   assert(tid!=NULL);
 
   // Get information from status file
@@ -93,14 +117,20 @@ int main(int argc, char *argv[]){
   pthread_create(&print_tread, NULL, &consume_info, NULL);
 
   for(i = 0; i < n_procs; i++){
+    // Wait for producer threads to finish
     pthread_join(threads[i], NULL);
   }
+  // Wait until print thread finishes
   pthread_join(print_tread, NULL);
+  /* 
+   * Thread configuration
+   */
 
   // free heap memory
   free(proc_buff);
   /* mutex destroy*/
   pthread_mutex_destroy(&mutex);
+  /* Semaphores destroy */
   sem_destroy(&empty);
   sem_destroy(&full);
   return 0;
