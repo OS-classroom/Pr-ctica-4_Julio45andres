@@ -45,6 +45,8 @@ pthread_mutex_t lock;
 
 proc_info* proc_buff;
 int n_procs;
+int next_in = 0;
+int next_out;
 
 void* put_info(void* _params);  // Productor
 void* consume_info(void* nope); // Consumidor
@@ -128,26 +130,21 @@ int main(int argc, char *argv[]){
 // Productor
 void* put_info(void* _params){
   int pos;
-  t_params* params = (t_params*) _params;
   // Inicio región crítica
   pthread_mutex_lock(&lock);
   sem_wait(&empty);
-  //sem_wait(&mutex);
   pthread_mutex_lock(&mutex);
+  t_params* params = (t_params*) _params;
   proc_info* myinfo = load_info(params->pid);
   if(sem_getvalue(&full, &pos) != 0){
     printf("\nCan't get value for full semaphore from producer\n");
     exit(1);
   }
-  proc_buff[pos] = *myinfo; // Produce
-  // /*Machete debugger*/
-  // if(pos == 1){
-  //   printf("pppp %d\n", pos);
-  //   exit(1);
-  // }
+  proc_buff[next_in] = *myinfo; // Produce
+  next_out = next_in;
+  next_in++;
   free(myinfo);
   pthread_mutex_unlock(&mutex);
-  //sem_post(&mutex);
   sem_post(&full);
   pthread_mutex_unlock(&lock);
   // Fin región crítica
@@ -159,17 +156,22 @@ void* consume_info(void* nope){
   int pos, i;
   for(i = 0; i < n_procs; i++){
     // Inicio región crítica
+    //pthread_mutex_lock(&lock);
     sem_wait(&full);
-    //sem_wait(&mutex);
     pthread_mutex_lock(&mutex);
     if(sem_getvalue(&full, &pos) != 0){
       printf("\nCan't get value for full semaphore from consumer\n");
       exit(1);
     }
-    print_info(&proc_buff[pos]); //Consume
+    
+    printf("\n\t******Debugg %d******\n", next_in);
+    
+    print_info(&proc_buff[next_out]); //Consume
+    next_in--;
+    next_out--;
     pthread_mutex_unlock(&mutex);
-    //sem_post(&mutex);
     sem_post(&empty);
+    // pthread_mutex_unlock(&lock);
     // Fin región crítica
   }
   return NULL;
